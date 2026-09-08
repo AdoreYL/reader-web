@@ -2,11 +2,6 @@
 
 阅读3服务器版，不需要手机。
 
-加入TG群(限时开放) 👉 [https://t.me/+pQ8HDlANPZ84ZWNl](https://t.me/+pQ8HDlANPZ84ZWNl)
-
-关注公众号，查看教程和书源👇
-
-![](imgs/mpcode.png)
 
 
 > 注意❗️
