@@ -19,6 +19,27 @@ jobs:
       - name: Compose syntax
         run: |
           cp .env.example .env
-          docker compose config
+          docker compose -f docker-compose.yml -f deploy/docker-compose.ci.yml config
       - name: Build image
         run: docker build --tag reader-web:ci .
+      - name: Start services and verify health checks
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml -f deploy/docker-compose.ci.yml up -d --build
+          for attempt in $(seq 1 30); do
+            if docker compose -f docker-compose.yml -f deploy/docker-compose.ci.yml exec -T reader wget -q -O - http://127.0.0.1:6788/health | grep -q ok; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              echo 'reader /health did not become ready' >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail --retry 15 --retry-delay 2 http://127.0.0.1:8080/health | grep -q ok
+      - name: Show container diagnostics
+        if: always()
+        run: docker compose -f docker-compose.yml -f deploy/docker-compose.ci.yml logs --no-color
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.yml -f deploy/docker-compose.ci.yml down -v
