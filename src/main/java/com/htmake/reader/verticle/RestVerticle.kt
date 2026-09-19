@@ -25,7 +25,7 @@ abstract class RestVerticle : CoroutineVerticle() {
 
     protected lateinit var router: Router
 
-    open var port: Int = 8080
+    open var port: Int = 6788
 
     override suspend fun start() {
         super.start()

@@ -24,7 +24,7 @@ reader:
     autoClearInactiveUser: 0
 
   server:
-    port: 8080
+    port: 6788
     webUrl: http://localhost:${reader.server.port}
 
 logging:
