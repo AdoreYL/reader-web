@@ -49,6 +49,10 @@ networks:
 
 volumes:
   reader-data:
+    name: reader-web-reader-data
   reader-logs:
+    name: reader-web-reader-logs
   caddy-data:
+    name: reader-web-caddy-data
   caddy-config:
+    name: reader-web-caddy-config

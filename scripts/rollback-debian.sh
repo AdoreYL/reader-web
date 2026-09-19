@@ -10,5 +10,5 @@ read -r -p "将恢复 $LATEST，现有数据会先停止服务。继续？输入
 [[ "$CONFIRM" == YES ]] || exit 1
 docker compose down
 cat "$LATEST/.env" > .env
-docker run --rm -v reader-web_reader-data:/data -v "$LATEST:/backup" alpine:3.20 sh -c 'rm -rf /data/* /data/.[!.]* /data/..?* 2>/dev/null || true; tar xzf /backup/reader-data.tgz -C /data'
+docker run --rm -v reader-web-reader-data:/data -v "$LATEST:/backup" alpine:3.20 sh -c 'rm -rf /data/* /data/.[!.]* /data/..?* 2>/dev/null || true; tar xzf /backup/reader-data.tgz -C /data'
 docker compose up -d

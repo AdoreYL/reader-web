@@ -11,7 +11,7 @@ mkdir -p "$BACKUP_DIR"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$BACKUP_DIR/$STAMP"
 mkdir -p "$BACKUP"
-docker run --rm -v reader-web_reader-data:/data -v "$BACKUP:/backup" alpine:3.20 tar czf /backup/reader-data.tgz -C /data .
+docker run --rm -v reader-web-reader-data:/data -v "$BACKUP:/backup" alpine:3.20 tar czf /backup/reader-data.tgz -C /data .
 cp .env "$BACKUP/.env"
 CURRENT_COMMIT=$(git rev-parse HEAD)
 [[ -z "$(git status --porcelain)" ]] || die '工作树存在未提交修改，未自动覆盖。'
