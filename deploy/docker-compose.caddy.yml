@@ -1,0 +1,32 @@
+# Optional advanced mode. Do not use with 1Panel or Nginx Proxy Manager on the same host.
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      reader:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - reader-caddy
+  reader:
+    networks:
+      - reader-caddy
+
+networks:
+  reader-caddy:
+
+volumes:
+  caddy-data:
+    name: reader-web-caddy-data
+  caddy-config:
+    name: reader-web-caddy-config

@@ -3,8 +3,8 @@ services:
     build: .
     image: reader-web:local
     restart: unless-stopped
-    expose:
-      - "6788"
+    ports:
+      - "${READER_HOST_BIND:-0.0.0.0}:${READER_HOST_PORT:-6788}:6788"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       SPRING_PROFILES_ACTIVE: prod
@@ -12,12 +12,11 @@ services:
       READER_APP_STORAGEPATH: /data/storage
       READER_APP_SECURE: "true"
       READER_APP_SECUREKEY: ${READER_ADMIN_PASSWORD:?set READER_ADMIN_PASSWORD}
-      READER_APP_INVITECODE: ${READER_INVITE_CODE:-}
+      READER_APP_INVITECODE: ${READER_INVITE_CODE:?set READER_INVITE_CODE}
       READER_APP_CACHECHAPTERCONTENT: "true"
     volumes:
       - reader-data:/data
       - reader-logs:/app/logs
-    networks: [internal]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:6788/health | grep -q ok"]
       interval: 15s
@@ -25,34 +24,8 @@ services:
       retries: 12
       start_period: 45s
 
-  caddy:
-    image: caddy:2.10-alpine
-    restart: unless-stopped
-    depends_on:
-      reader:
-        condition: service_healthy
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks: [internal]
-
-networks:
-  internal:
-    driver: bridge
-
 volumes:
   reader-data:
     name: reader-web-reader-data
   reader-logs:
     name: reader-web-reader-logs
-  caddy-data:
-    name: reader-web-caddy-data
-  caddy-config:
-    name: reader-web-caddy-config
