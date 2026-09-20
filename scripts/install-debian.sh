@@ -2,6 +2,34 @@
 set -Eeuo pipefail
 
 APP_DIR="${READER_WEB_DIR:-/opt/reader-web}"
+
+usage() {
+  printf '用法：install-debian.sh [--install-dir 目录]\n未指定 --install-dir 时默认安装到 /opt/reader-web。\n'
+}
+
+while (($#)); do
+  case "$1" in
+    --install-dir)
+      [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 2; }
+      APP_DIR="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      printf '[reader-web] 错误：不支持的参数：%s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$APP_DIR" != /* ]]; then
+  mkdir -p "$APP_DIR"
+  APP_DIR="$(cd "$APP_DIR" && pwd -P)"
+fi
 REPO_URL="https://github.com/AdoreYL/reader-web.git"
 BRANCH="main"
 ENV_FILE="$APP_DIR/.env"
@@ -81,36 +109,18 @@ if [[ -d "$APP_DIR/.git" ]]; then
   git -C "$APP_DIR" checkout "$BRANCH" || die '切换 main 分支失败。'
   git -C "$APP_DIR" merge --ff-only "origin/$BRANCH" || die '已有安装不是可快进状态，未 reset 或删除数据。'
 elif [[ -d "$APP_DIR" ]] && [[ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-  PARTIAL_DIR="${APP_DIR}.partial.$(date +%Y%m%d-%H%M%S)"
-  log "检测到非 Git 的已有目录；为保留现场，将其安全改名为 $PARTIAL_DIR。"
-  mv "$APP_DIR" "$PARTIAL_DIR" || die "无法安全保留已有目录：$APP_DIR"
-  log "首次安装：克隆 $REPO_URL 到 $APP_DIR……"
-  CLONE_DIR=$(mktemp -d "$(dirname "$APP_DIR")/.reader-web.clone.XXXXXX")
-  if ! git_with_retry clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR/repository"; then
-    rm -rf "$CLONE_DIR"
-    die '源码连续下载失败，未覆盖已有文件。'
-  fi
-  mv "$CLONE_DIR/repository" "$APP_DIR"
-  rmdir "$CLONE_DIR"
-  if [[ -f "$PARTIAL_DIR/.env" ]]; then
-    cp -p "$PARTIAL_DIR/.env" "$APP_DIR/.env"
-    log "已从现场目录保留 .env：$PARTIAL_DIR/.env"
-  fi
-  if [[ -d "$PARTIAL_DIR/backups" ]]; then
-    cp -a "$PARTIAL_DIR/backups" "$APP_DIR/backups"
-    log "已从现场目录保留 backups：$PARTIAL_DIR/backups"
-  fi
+  die "安装路径已存在且不是 reader-web Git 工作树，为避免覆盖文件而停止：$APP_DIR；请改用空目录。"
 else
   [[ ! -d "$APP_DIR" || -z "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]] || die '安装目录不是空目录。'
-  [[ -d "$APP_DIR" ]] && rmdir "$APP_DIR"
   log "首次安装：克隆 $REPO_URL 到 $APP_DIR……"
   CLONE_DIR=$(mktemp -d "$(dirname "$APP_DIR")/.reader-web.clone.XXXXXX")
   if ! git_with_retry clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR/repository"; then
     rm -rf "$CLONE_DIR"
     die '源码连续下载失败，未覆盖已有文件。'
   fi
-  mv "$CLONE_DIR/repository" "$APP_DIR"
-  rmdir "$CLONE_DIR"
+  mkdir -p "$APP_DIR"
+  cp -a "$CLONE_DIR/repository/." "$APP_DIR/"
+  rm -rf "$CLONE_DIR"
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then

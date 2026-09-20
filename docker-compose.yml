@@ -1,3 +1,5 @@
+name: reader-web
+
 services:
   reader:
     build: .

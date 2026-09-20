@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-APP_DIR="${READER_WEB_DIR:-/opt/reader-web}"
-BACKUP_DIR="$APP_DIR/backups"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+APP_DIR="${READER_WEB_DIR:-$SCRIPT_DIR}"
 [[ $EUID -eq 0 ]] || { echo '请使用 root 或 sudo 运行。' >&2; exit 1; }
+BACKUP_DIR="$APP_DIR/backups"
 cd "$APP_DIR"
 LATEST=$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)
 [[ -n "$LATEST" && -f "$LATEST/reader-data.tgz" ]] || { echo '没有可恢复的备份。' >&2; exit 1; }

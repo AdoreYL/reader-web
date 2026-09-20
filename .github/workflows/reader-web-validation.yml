@@ -11,12 +11,23 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux/amd64
+            runner: ubuntu-latest
+            platform: linux/amd64
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
         run: bash -n scripts/*.sh
-      - name: Compose syntax and default deployment contract
+      - name: Compose syntax and deployment contract
         run: |
           cp .env.example .env
           docker compose config > compose.rendered.yml
@@ -30,16 +41,16 @@ jobs:
           grep -Fq 'reader-web-reader-data' scripts/update-debian.sh
           grep -Fq 'reader-web-reader-data' scripts/rollback-debian.sh
       - name: Build image
-        run: docker build --tag reader-web:ci .
+        run: docker build --platform '${{ matrix.platform }}' --tag reader-web:ci .
       - name: Start default deployment and verify health checks
         run: |
-          cp .env.example .env
-          docker compose up -d --build
-          for attempt in $(seq 1 30); do
+          docker tag reader-web:ci reader-web:local
+          docker compose up -d
+          for attempt in $(seq 1 45); do
             if docker compose exec -T reader wget -q -O - http://127.0.0.1:6788/health | grep -q ok; then
               break
             fi
-            if [ "$attempt" = 30 ]; then
+            if [ "$attempt" = 45 ]; then
               echo 'reader internal /health did not become ready' >&2
               exit 1
             fi

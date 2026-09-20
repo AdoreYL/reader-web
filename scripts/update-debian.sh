@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-APP_DIR="${READER_WEB_DIR:-/opt/reader-web}"
-BACKUP_DIR="$APP_DIR/backups"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+APP_DIR="${READER_WEB_DIR:-$SCRIPT_DIR}"
 log(){ printf '[reader-web] %s\n' "$*"; }
+BACKUP_DIR="$APP_DIR/backups"
 die(){ log "错误：$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die '请使用 root 或 sudo 运行。'
 [[ -d "$APP_DIR/.git" ]] || die "找不到 Git 安装：$APP_DIR"

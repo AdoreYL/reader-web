@@ -470,16 +470,7 @@
         </div>
       </div>
       <div class="bottom-icons">
-        <a href="https://github.com/hectorqin/reader" target="_blank">
-          <div class="bottom-icon">
-            <img
-              v-if="isNight"
-              :src="require('../assets/imgs/github.png')"
-              alt=""
-            />
-            <img v-else :src="require('../assets/imgs/github2.png')" alt="" />
-          </div>
-        </a>
+
         <span
           class="theme-item"
           :style="themeColor"
