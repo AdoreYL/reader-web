@@ -5,7 +5,7 @@ RUN npm install --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
-FROM gradle:6.1.1-jdk8 AS app-build
+FROM gradle:6.9.4-jdk8 AS app-build
 WORKDIR /src
 COPY --chown=gradle:gradle . ./
 COPY --from=web-build /src/web/dist ./src/main/resources/web
