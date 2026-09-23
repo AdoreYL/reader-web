@@ -40,6 +40,11 @@ jobs:
           grep -Fq 'reader-web-reader-data' compose.rendered.yml
           grep -Fq 'reader-web-reader-data' scripts/update-debian.sh
           grep -Fq 'reader-web-reader-data' scripts/rollback-debian.sh
+      - name: Frontend legacy UI cleanup
+        run: |
+          ! rg -n "showMPCode|joinTGChannel|updateForce|假装大佬|facker_channel|MPCode|hectorqin/reader|version-text" web/src --glob '!web/public/**'
+      - name: Frontend build
+        run: docker run --rm -v "$PWD/web:/src" -w /src node:16-alpine sh -c "npm install --no-audit --no-fund && npm run build"
       - name: Build image
         run: docker build --platform '${{ matrix.platform }}' --tag reader-web:ci .
       - name: Start default deployment and verify health checks

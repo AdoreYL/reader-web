@@ -219,10 +219,15 @@ class BookController(coroutineContext: CoroutineContext): BaseController(corouti
         }
         var userNameSpace = getUserNameSpace(context)
         var fileList = arrayListOf<Map<String, Any>>()
+        if (context.fileUploads().size > 5) return returnData.setErrorMsg("一次最多导入 5 个文件")
         context.fileUploads().forEach {
             var file = File(it.uploadedFileName())
             logger.info("uploadFile: {} {} {}", it.uploadedFileName(), it.fileName(), file)
             if (file.exists()) {
+                if (file.length() > 100L * 1024L * 1024L) {
+                    file.deleteRecursively()
+                    return returnData.setErrorMsg("书籍文件超过 100 MB 限制")
+                }
                 var fileName = it.fileName()
                 val ext = getFileExt(fileName)
                 if (ext != "txt" && ext != "epub" && ext != "umd" && ext != "cbz") {
@@ -255,7 +260,7 @@ class BookController(coroutineContext: CoroutineContext): BaseController(corouti
                     val book = Book.initLocalBook(localFileUrl, localFilePath, getWorkDir())
                     book.setUserNameSpace(userNameSpace)
                     try {
-                        val chapters = LocalBook.getChapterList(book)
+                        val chapters = withContext(Dispatchers.IO) { LocalBook.getChapterList(book) }
                         fileList.add(mapOf("book" to book, "chapters" to chapters))
                     } catch(e: TocEmptyException) {
                         fileList.add(mapOf("book" to book, "chapters" to arrayListOf<Int>()))
@@ -2303,7 +2308,7 @@ class BookController(coroutineContext: CoroutineContext): BaseController(corouti
                     val book = Book.initLocalBook(path, path, getWorkDir())
                     book.setUserNameSpace(userNameSpace)
                     try {
-                        val chapters = LocalBook.getChapterList(book)
+                        val chapters = withContext(Dispatchers.IO) { LocalBook.getChapterList(book) }
                         fileList.add(mapOf("book" to book, "chapters" to chapters))
                     } catch(e: TocEmptyException) {
                         fileList.add(mapOf("book" to book, "chapters" to arrayListOf<Int>()))
@@ -2342,6 +2347,7 @@ class BookController(coroutineContext: CoroutineContext): BaseController(corouti
         var home = getWorkDir("storage", "localStore")
 
         // logger.info("type: {}", type)
+        if (context.fileUploads().size > 5) return returnData.setErrorMsg("一次最多导入 5 个文件")
         context.fileUploads().forEach {
             var file = File(it.uploadedFileName())
             logger.info("uploadFile: {} {} {}", it.uploadedFileName(), it.fileName(), file)

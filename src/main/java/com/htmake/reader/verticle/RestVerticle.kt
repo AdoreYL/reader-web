@@ -70,7 +70,7 @@ abstract class RestVerticle : CoroutineVerticle() {
             }
         }
 
-        router.route().handler(BodyHandler.create())
+        router.route().handler(BodyHandler.create().setBodyLimit(105L * 1024L * 1024L))
 
         router.route().handler(LoggerHandler.create(LoggerFormat.DEFAULT));
         router.route("/reader3/*").handler {

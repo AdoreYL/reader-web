@@ -21,9 +21,6 @@
       <div class="navigation-inner-wrapper">
         <div class="navigation-title">
           阅读
-          <span class="version-text" @click="updateForce">{{
-            $store.state.version
-          }}</span>
         </div>
         <div class="navigation-sub-title">
           清风不识字，何故乱翻书
@@ -262,6 +259,11 @@
             >
               导入书籍
             </el-tag>
+            <span v-if="bookUploadStatus" class="book-upload-status">
+              {{ bookUploadStatus }}
+              <span v-if="bookUploadStatus === '正在上传'"> {{ bookUploadProgress }}%</span>
+              <el-button type="text" size="mini" @click="cancelBookUpload">取消</el-button>
+            </span>
             <input
               ref="bookRef"
               type="file"
@@ -398,29 +400,6 @@
               @click="backupToWebdav"
             >
               保存备份
-            </el-tag>
-          </div>
-        </div>
-        <div class="setting-wrapper">
-          <div class="setting-title">
-            其它
-          </div>
-          <div class="setting-item">
-            <el-tag
-              type="info"
-              :effect="isNight ? 'dark' : 'light'"
-              class="setting-btn"
-              @click="showMPCode"
-            >
-              关注公众号【假装大佬】
-            </el-tag>
-            <el-tag
-              type="info"
-              :effect="isNight ? 'dark' : 'light'"
-              class="setting-btn"
-              @click="joinTGChannel"
-            >
-              加入TG频道【假装大佬】
             </el-tag>
           </div>
         </div>
@@ -1076,6 +1055,9 @@ export default {
       showImportBookDialog: false,
 
       importMultiBookTip: "",
+      bookUploadProgress: 0,
+      bookUploadStatus: "",
+      bookUploadCancelSource: null,
 
       rssSource: {},
 
@@ -1772,47 +1754,41 @@ export default {
         this.currentUserName + "@lastRemoteSourceUrl",
         ""
       );
-      const res = await this.$prompt("请输入远程书源链接", "导入远程书源文件", {
+      const prompt = await this.$prompt("请输入远程书源链接", "导入远程书源文件", {
         inputValue: lastRemoteSourceUrl || "",
         confirmButtonText: "确定",
         cancelButtonText: "取消"
-      }).catch(() => {
-        return false;
-      });
-      if (!res || !res.value) {
-        return;
-      }
-      Axios.post(this.api + "/readRemoteSourceFile", {
-        url: res.value
-      }).then(
-        res => {
-          if (res.data.isSuccess) {
-            setCache(this.currentUserName + "@lastRemoteSourceUrl", res.value);
-            //
-            let sourceList = [];
-            res.data.data.forEach(v => {
-              try {
-                const data = JSON.parse(v);
-                if (Array.isArray(data)) {
-                  sourceList = sourceList.concat(data);
-                }
-              } catch (error) {
-                //
-              }
-            });
-            if (sourceList.length) {
-              this.importSourceList = sourceList;
-              this.showImportSourceDialog = true;
-              this.isImportRssSource = false;
-            } else {
-              this.$message.error("远程书源文件错误");
-            }
+      }).catch(() => false);
+      if (!prompt || !prompt.value) return;
+
+      const remoteUrl = prompt.value.trim();
+      Axios.post(this.api + "/readRemoteSourceFile", { url: remoteUrl }).then(
+        response => {
+          if (!response.data.isSuccess) {
+            this.$message.error(response.data.errorMsg || "远程书源导入失败");
+            return;
           }
+          const sourceList = [];
+          response.data.data.forEach(value => {
+            try {
+              const data = JSON.parse(value.replace(/^\uFEFF/, ""));
+              if (Array.isArray(data)) sourceList.push(...data);
+              else if (data && typeof data === "object") sourceList.push(data);
+            } catch (error) {
+              // Retain a guard for legacy server responses.
+            }
+          });
+          if (!sourceList.length) {
+            this.$message.error("返回内容不是可识别书源 JSON");
+            return;
+          }
+          setCache(this.currentUserName + "@lastRemoteSourceUrl", remoteUrl);
+          this.importSourceList = sourceList;
+          this.showImportSourceDialog = true;
+          this.isImportRssSource = false;
         },
-        error => {
-          this.$message.error(
-            "读取远程书源文件内容失败 " + (error && error.toString())
-          );
+        () => {
+          this.$message.error("远程 URL 无法访问或请求超时");
         }
       );
     },
@@ -2237,37 +2213,62 @@ export default {
     importLocalBook() {
       this.$refs.bookRef.dispatchEvent(new MouseEvent("click"));
     },
+    cancelBookUpload() {
+      if (this.bookUploadCancelSource) {
+        this.bookUploadCancelSource.cancel("用户取消上传");
+      }
+    },
     onBookFileChange(event) {
-      if (!event.target || !event.target.files || !event.target.files.length) {
+      if (!event.target || !event.target.files || !event.target.files.length) return;
+      const files = Array.from(event.target.files);
+      const maxBytes = 100 * 1024 * 1024;
+      if (files.length > 5) {
+        this.$message.error("一次最多导入 5 个文件");
+        event.target.value = null;
         return;
       }
-      let param = new FormData();
-      for (let i = 0; i < event.target.files.length; i++) {
-        const file = event.target.files[i];
-        param.append("file" + i, file);
+      const oversized = files.find(file => file.size > maxBytes);
+      if (oversized) {
+        this.$message.error(`文件 ${oversized.name} 超过 100 MB 限制`);
+        event.target.value = null;
+        return;
       }
-      Axios.post(this.api + "/importBookPreview", param, {
-        headers: { "Content-Type": "multipart/form-data" }
-      }).then(
-        res => {
-          if (res.data.isSuccess && res.data.data.length) {
-            if (res.data.data.length > 1) {
-              // 批量导入
-              this.importMultiBooks(res.data.data);
-            } else {
-              //
-              this.importBookInfo = res.data.data[0].book;
-              this.importBookGroup = [];
-              this.importBookChapters = res.data.data[0].chapters;
-              this.showImportBookDialog = true;
-            }
+      const form = new FormData();
+      files.forEach((file, index) => form.append("file" + index, file));
+      this.bookUploadProgress = 0;
+      this.bookUploadStatus = "正在上传";
+      this.bookUploadCancelSource = Axios.CancelToken.source();
+      Axios.post(this.api + "/importBookPreview", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        cancelToken: this.bookUploadCancelSource.token,
+        onUploadProgress: progress => {
+          if (progress.lengthComputable) {
+            this.bookUploadProgress = Math.round(progress.loaded * 100 / progress.total);
           }
-        },
-        error => {
-          this.$message.error("上传书籍 " + (error && error.toString()));
         }
-      );
-      this.$refs.bookRef.value = null;
+      }).then(response => {
+        if (!response.data.isSuccess || !response.data.data.length) {
+          this.$message.error(response.data.errorMsg || "书籍解析失败");
+          return;
+        }
+        this.bookUploadStatus = "正在解析";
+        if (response.data.data.length > 1) {
+          this.importMultiBooks(response.data.data);
+        } else {
+          this.importBookInfo = response.data.data[0].book;
+          this.importBookGroup = [];
+          this.importBookChapters = response.data.data[0].chapters;
+          this.showImportBookDialog = true;
+        }
+      }).catch(error => {
+        if (!Axios.isCancel(error)) {
+          this.$message.error((error.response && error.response.data && error.response.data.errorMsg) || "上传或解析失败");
+        }
+      }).finally(() => {
+        this.bookUploadStatus = "";
+        this.bookUploadCancelSource = null;
+      });
+      event.target.value = null;
     },
     async importMultiBooks(books) {
       if (!books || !books.length) {
@@ -2611,7 +2612,6 @@ export default {
         }
       );
     },
-    updateForce() {
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker
           .getRegistrations()
@@ -2735,12 +2735,6 @@ export default {
     },
     showUserManageDialog() {
       eventBus.$emit("showUserManageDialog");
-    },
-    showMPCode() {
-      eventBus.$emit("showMPCodeDialog");
-    },
-    joinTGChannel() {
-      window.open("https://t.me/facker_channel", "_target");
     },
     ensureLoadBookCover() {
       // 手动触发滚动事件，显示书籍封面图片
@@ -3025,15 +3019,6 @@ export default {
       font-weight: 600;
       font-family: -apple-system, "Noto Sans", "Helvetica Neue", Helvetica, "Nimbus Sans L", Arial, "Liberation Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Source Han Sans CN", "Microsoft YaHei", "Wenquanyi Micro Hei", "WenQuanYi Zen Hei", "ST Heiti", SimHei, "WenQuanYi Zen Hei Sharp", sans-serif;
 
-      .version-text {
-        float: right;
-        font-size: 14px;
-        line-height: 33px;
-        font-weight: 400;
-        color: #b1b1b1;
-        display: inline-block;
-        cursor: pointer;
-      }
     }
 
     .navigation-sub-title {

@@ -44,6 +44,12 @@ import io.vertx.core.http.HttpMethod
 import com.htmake.reader.api.ReturnData
 import io.legado.app.utils.MD5Utils
 import java.net.URLDecoder;
+import java.net.URI
+import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.SocketTimeoutException
+import java.nio.charset.StandardCharsets
+import java.io.ByteArrayOutputStream
 import java.net.URLEncoder;
 import java.net.URL;
 import java.util.UUID;
@@ -348,33 +354,88 @@ class BookSourceController(coroutineContext: CoroutineContext): BaseController(c
         return returnData.setData(sourceList.getList())
     }
 
-    suspend fun readRemoteSourceFile(context: RoutingContext) {
-        val returnData = ReturnData()
-        var url: String
-        if (context.request().method() == HttpMethod.POST) {
-            // post 请求
-            url = context.bodyAsJson.getString("url") ?: ""
-        } else {
-            // get 请求
-            url = context.queryParam("url").firstOrNull() ?: ""
-        }
-        if (url.isNullOrEmpty()) {
-            context.success(returnData.setErrorMsg("请输入远程书源链接"))
-            return
-        }
-
-        launch(Dispatchers.IO) {
-            webClient.getAbs(url).timeout(3000).send {
-                var body = it.result()?.bodyAsString()
-                if (body != null) {
-                    context.success(returnData.setData(arrayListOf(body)))
-                } else {
-                    context.success(returnData.setErrorMsg("远程书源链接错误"))
-                }
-            }
-        }
+    private companion object {
+        const val MAX_REMOTE_SOURCE_BYTES = 5 * 1024 * 1024
+        const val MAX_REMOTE_REDIRECTS = 5
+        const val REMOTE_TIMEOUT_MS = 10_000
     }
 
+    private fun validateRemoteUri(value: String): URI {
+        val uri = try { URI(value.trim()) } catch (e: Exception) {
+            throw IllegalArgumentException("远程 URL 格式不正确")
+        }
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") throw IllegalArgumentException("因安全策略拒绝：只允许 HTTP 或 HTTPS")
+        if (!uri.userInfo.isNullOrEmpty() || uri.host.isNullOrEmpty()) throw IllegalArgumentException("因安全策略拒绝：URL 不得包含用户信息")
+        val addresses = try { InetAddress.getAllByName(uri.host) } catch (e: Exception) {
+            throw IllegalArgumentException("远程服务器无法解析")
+        }
+        if (addresses.isEmpty() || addresses.any { it.isAnyLocalAddress || it.isLoopbackAddress || it.isLinkLocalAddress || it.isSiteLocalAddress || it.hostAddress.startsWith("169.254.") || it.hostAddress.startsWith("100.64.") }) {
+            throw IllegalArgumentException("因安全策略拒绝：目标地址属于本机、内网或容器网络")
+        }
+        if (addresses.any { it.hostAddress == "169.254.169.254" || it.hostAddress == "100.100.100.200" }) throw IllegalArgumentException("因安全策略拒绝：禁止访问云 metadata 地址")
+        return uri
+    }
+
+    private fun readRemoteJson(url: String): String {
+        var current = validateRemoteUri(url)
+        repeat(MAX_REMOTE_REDIRECTS + 1) { redirectCount ->
+            val connection = current.toURL().openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = REMOTE_TIMEOUT_MS
+            connection.readTimeout = REMOTE_TIMEOUT_MS
+            connection.setRequestProperty("Accept", "application/json, text/plain;q=0.8, */*;q=0.1")
+            connection.setRequestProperty("User-Agent", "reader-web-source-import")
+            try {
+                val status = connection.responseCode
+                if (status in 300..399) {
+                    if (redirectCount == MAX_REMOTE_REDIRECTS) throw IllegalArgumentException("远程服务器重定向次数过多")
+                    val location = connection.getHeaderField("Location") ?: throw IllegalArgumentException("远程服务器重定向地址为空")
+                    current = validateRemoteUri(current.resolve(location).toString())
+                    return@repeat
+                }
+                if (status !in 200..299) throw IllegalArgumentException("远程服务器返回 HTTP $status")
+                val contentLength = connection.getHeaderFieldLong("Content-Length", -1L)
+                if (contentLength > MAX_REMOTE_SOURCE_BYTES) throw IllegalArgumentException("远程响应过大，限制为 5 MB")
+                val output = ByteArrayOutputStream()
+                connection.inputStream.use { input ->
+                    val buffer = ByteArray(8192)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_REMOTE_SOURCE_BYTES) throw IllegalArgumentException("远程响应过大，限制为 5 MB")
+                        output.write(buffer, 0, count)
+                    }
+                }
+                val body = String(output.toByteArray(), StandardCharsets.UTF_8).removePrefix("\uFEFF").trim()
+                try { io.vertx.core.json.JsonArray(body) } catch (_: Exception) {
+                    try { io.vertx.core.json.JsonObject(body) } catch (_: Exception) { throw IllegalArgumentException("返回内容不是可识别书源 JSON") }
+                }
+                return body
+            } finally { connection.disconnect() }
+        }
+        throw IllegalArgumentException("远程书源读取失败")
+    }
+
+    suspend fun readRemoteSourceFile(context: RoutingContext) {
+        val returnData = ReturnData()
+        if (!checkAuth(context)) { context.success(returnData.setData("NEED_LOGIN").setErrorMsg("请登录后使用")); return }
+        val url = if (context.request().method() == HttpMethod.POST) context.bodyAsJson.getString("url") ?: "" else context.queryParam("url").firstOrNull() ?: ""
+        if (url.isBlank()) { context.success(returnData.setErrorMsg("请输入远程书源链接")); return }
+        try {
+            val body = withContext(Dispatchers.IO) { readRemoteJson(url) }
+            context.success(returnData.setData(arrayListOf(body)))
+        } catch (e: SocketTimeoutException) {
+            context.success(returnData.setErrorMsg("请求远程书源超时"))
+        } catch (e: IllegalArgumentException) {
+            context.success(returnData.setErrorMsg(e.message ?: "远程书源读取失败"))
+        } catch (e: Exception) {
+            logger.warn("remote source import failed: {}", e.message)
+            context.success(returnData.setErrorMsg("远程 URL 无法访问"))
+        }
+    }
     suspend fun deleteUserBookSource(context: RoutingContext): ReturnData {
         val returnData = ReturnData()
         if (!checkAuth(context)) {

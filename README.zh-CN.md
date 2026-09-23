@@ -69,6 +69,17 @@ sudo ufw deny 6788/tcp
 
 `deploy/docker-compose.caddy.yml` 仅供自行管理域名和证书的高级部署，会占用 `80/443`，不要与 1Panel、Nginx Proxy Manager 或同机其他反向代理同时使用。默认安装和默认 Compose 不使用它。
 
+## 项目文档
+
+- [安装与升级](docs/install-upgrade.md)
+- [反向代理](docs/proxy.md)
+- [备份与恢复](docs/backup-restore.md)
+- [卸载](docs/uninstall.md)
+- [安全说明](docs/security.md)
+- [API 与兼容性](docs/api-compatibility.md)
+- [架构与开发](docs/architecture.md)
+- [前端现代化](docs/frontend-modernization.md)
+
 ## 远程仓库
 
 - `origin`：<https://github.com/AdoreYL/reader-web.git>，唯一允许推送的仓库。

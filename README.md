@@ -37,6 +37,10 @@ sudo /opt/reader-web/scripts/uninstall-debian.sh --purge
 
 当前目录安装时将上述路径替换为实际安装目录。AMD64/x86_64 与 ARM64/aarch64 由 GitHub Actions 分别实际验证；ARMv7/32 位 ARM 未验证，不默认承诺支持。
 
+## Current Documentation
+
+The maintained deployment, security, compatibility, architecture, and modernization documents are in [docs](docs/). The project repository is <https://github.com/AdoreYL/reader-web>.
+
 ---
 # reader-web
 
