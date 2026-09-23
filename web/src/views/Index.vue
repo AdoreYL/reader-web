@@ -2612,38 +2612,6 @@ export default {
         }
       );
     },
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .getRegistrations()
-          .then(async function(registrations) {
-            /* eslint-disable-next-line no-console */
-            console.log("registrations", registrations);
-            for (let i = 0; i < registrations.length; i++) {
-              await registrations[i].update();
-            }
-
-            /* eslint-disable-next-line no-console */
-            console.log("Try to clear home cache");
-            navigator.serviceWorker.controller &&
-              navigator.serviceWorker.controller.postMessage({
-                type: "CLEAR_HOME_CACHE"
-              });
-
-            /* eslint-disable-next-line no-console */
-            console.log("Try to skip waiting");
-            navigator.serviceWorker.controller &&
-              navigator.serviceWorker.controller.postMessage({
-                type: "SKIP_WAITING"
-              });
-
-            setTimeout(() => {
-              /* eslint-disable-next-line no-console */
-              console.log("Try to reload force");
-              window.location.reload(true);
-            }, 50);
-          });
-      }
-    },
     async scanCacheStorage() {
       this.localCacheStats = {
         total: (await this.analyseLocalStorage()).totalBytes,
