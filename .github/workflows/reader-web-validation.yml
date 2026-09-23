@@ -44,7 +44,7 @@ jobs:
         run: |
           ! rg -n "showMPCode|joinTGChannel|updateForce|假装大佬|facker_channel|MPCode|hectorqin/reader|version-text" web/src --glob '!web/public/**'
       - name: Frontend build
-        run: docker run --rm -v "$PWD/web:/src" -w /src node:16-alpine sh -c "npm install --no-audit --no-fund && npm run build"
+        run: docker build --platform '${{ matrix.platform }}' --target web-build --tag reader-web:web-ci .
       - name: Build image
         run: docker build --platform '${{ matrix.platform }}' --tag reader-web:ci .
       - name: Start default deployment and verify health checks
